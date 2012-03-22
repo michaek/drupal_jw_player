@@ -42,6 +42,7 @@ function jw_player_theme() {
       'variables' => array(
         'file_object' => NULL,
         'sources' => '',
+        'streamer' => '',
         'preset' => '',
         'image' => '',
         'options' => array(),
@@ -58,7 +59,7 @@ function jw_player_field_formatter_info() {
   $formatters = array(
     'jw_player' => array(
       'label' => t('JW player'),
-      'field types' => array('file'),
+      'field types' => array('link_field', 'file'),
       'settings' => array(
         'jwplayer_preset' => '',
       ),
@@ -166,11 +167,29 @@ function jw_player_field_formatter_view($entity_type, $entity, $field, $instance
     foreach ($files as $delta => $file) {
       $element[$delta] = array(
         '#theme' => 'jw_player',
-        '#file_object' => $file,
         '#preset' => $display['settings']['jwplayer_preset'],
       );
+      if (isset($file->fid)) {
+        $element[$delta]['#file_object'] = $file;
+      } else {
+        
+        $url = $file->url;
+        $providers = jw_player_provider_load();
+        foreach ($providers as $provider) {
+          // TODO: respect active provider setting.
+          $provider->process_url($url, $element[$delta]);
+        }
+        
+        $element[$delta]['#sources'] = array(
+          array(
+            'file_path' => $url,
+            'file_mime' => 'video/mp4',
+          ),
+        );
+      }
     }
   }
+  
   return $element;
 }
 
@@ -196,11 +215,27 @@ function jw_player_skins($name = NULL) {
 }
 
 /**
+ * Implements hook_ctools_plugin_type().
+ */
+function jw_player_ctools_plugin_type() {
+  return array(
+    'video_provider' => array(
+      'cache' => FALSE,
+      'use hooks' => TRUE,
+      'classes' => array(),
+    ),
+  );
+}
+
+/**
  * Implements hook_ctools_plugin_api().
  */
 function jw_player_ctools_plugin_api($owner, $api) {
   if ($owner == 'jw_player' && $api == 'jw_player_presets') {
     return array('version' => 1);
+  }
+  if ($owner == 'jw_player' && $api == 'video_provider') {
+    return array("version" => "1");
   }
 }
 
@@ -211,6 +246,9 @@ function jw_player_ctools_plugin_directory($module, $type) {
   // Load the export_ui plugin.
   if ($type =='export_ui') {
     return 'plugins/export_ui';
+  }
+  if ($type =='video_provider') {
+    return 'plugins/video_provider';
   }
 }
 
@@ -237,6 +275,28 @@ function jw_player_preset_load($machine_name = NULL) {
       return $items;
     }
   }
+}
+
+/**
+ * Load the given provider(s).
+ * @param string $name
+ * @return array
+ */
+function jw_player_provider_load($name = NULL) {
+  ctools_include('plugins');
+  if ($name) {
+    $providers = array(ctools_get_plugins('jw_player', 'video_provider', $name));
+  } else {
+    $providers = ctools_get_plugins('jw_player', 'video_provider');
+  }
+  $handlers = array();
+  foreach ($providers as $plugin) {
+    $class = ctools_plugin_get_class($plugin, 'provider');
+    if ($class) {
+      $handlers[$plugin['name']] = new $class();
+    }
+  }
+  return $handlers;
 }
 
 /**
@@ -336,7 +396,7 @@ function template_preprocess_jw_player(&$variables) {
     $options = $variables['options'];
     unset($variables['options']);
   }
-
+  
   // Merge all variables together. Preset settings take priority over defaults,
   // variables passed directly to the theme function take priority over both.
   $variables = array_merge($default_settings, $preset_settings, $options, $variables);
@@ -381,6 +441,7 @@ function template_preprocess_jw_player(&$variables) {
     'playlist.size',
     'skin',
     'autoplay',
+    'streamer',
   );
   foreach ($config_variables as $key) {
     if (!empty($variables[$key])) {

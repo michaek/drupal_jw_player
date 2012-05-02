@@ -10,10 +10,9 @@ class LimelightVideoProvider extends AbstractVideoProvider {
   
   public function process_url(&$url, &$settings) {
     $parts = drupal_parse_url($url);
-    extract(drupal_parse_url($url));
-    
-    // TODO: determine a real way to identify this provider.
-    if (strpos($path, '/') == '0') {
+
+    // Assume that URLs that don't start with http are for limelight.
+    if (substr($parts['path'], 0, 4) != 'http') {
       $settings['#streamer'] = variable_get('jw_player_limelight_streamer_url');
     }
   }

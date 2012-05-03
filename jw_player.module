@@ -46,6 +46,8 @@ function jw_player_theme() {
         'preset' => '',
         'image' => '',
         'options' => array(),
+        'entity' => NULL,
+        'entity_type' => '',
       ),
       'template' => 'theme/jw_player',
     ),
@@ -168,6 +170,8 @@ function jw_player_field_formatter_view($entity_type, $entity, $field, $instance
       $element[$delta] = array(
         '#theme' => 'jw_player',
         '#preset' => $display['settings']['jwplayer_preset'],
+        '#entity' => $entity,
+        '#entity_type' => $entity_type,
       );
       if (isset($file->fid)) {
         $element[$delta]['#file_object'] = $file;
@@ -311,6 +315,8 @@ function jw_player_default_settings() {
       'flashplayer' => file_create_url(libraries_get_path('jwplayer') . '/player.swf'),
       'width' => '640',
       'height' => '480',
+      'preview_start' => '0',
+      'preview_duration' => '0',
       'autoplay' => FALSE,
       'controlbar' => 'bottom',
     );
@@ -388,7 +394,7 @@ function template_preprocess_jw_player(&$variables) {
       $preset_settings = $preset['settings'];
     }
   }
-
+  
   // Get any preset override options that were sent through the formatter or
   // theme call.
   $options = array();
@@ -446,6 +452,18 @@ function template_preprocess_jw_player(&$variables) {
   foreach ($config_variables as $key) {
     if (!empty($variables[$key])) {
       $variables['config'][$key] = $variables[$key];
+    }
+  }
+  
+  $variables['display_preview'] = FALSE;
+  if ($variables['preview_start'] && $variables['preview_duration']) {
+    // Assume that the last module invoking this hook gets to decide.
+    $display_preview = array_pop(module_invoke_all('jw_player_display_preview', $variables));
+    if ($display_preview) {
+      $variables['config']['start'] = $variables['preview_start'];
+      $variables['config']['duration'] = $variables['preview_duration'];
+      // The control bar allows users to thwart the preview.
+      $variables['config']['controlbar'] = FALSE;
     }
   }
 
